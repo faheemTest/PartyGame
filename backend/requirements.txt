@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-socketio[asyncio_server]
+python-engineio
+motor
+pydantic
+python-dotenv
+aiofiles
+pandas
