@@ -52,6 +52,51 @@ async def api_export_results(code: str):
         rows.append({"name": p.get("name"), "score": p.get("score", 0)})
     return export_csv(rows, columns=["name", "score"], filename=f"{code}-results.csv")
 
+# Add this import near top if not present
+from fastapi import HTTPException
+
+# REST endpoint to create/start a question for a session (also emits to participants)
+@app.post("/api/session/{code}/question")
+async def api_create_question(code: str, payload: dict):
+    """
+    Body example:
+    {
+      "text": "What is 2+2?",
+      "type": "single",            # "single" | "multi" | "text"
+      "options": ["3","4","5"],    # optional for text type
+      "time_limit": 20,
+      "points": 100,
+      "correct": "4"               # optional, used for scoring
+    }
+    """
+    s = await db.sessions.find_one({"code": code})
+    if not s:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # create question doc
+    question = dict(payload)
+    question["id"] = question.get("id") or gen_code(8)
+    import datetime
+    question["created_at"] = datetime.datetime.utcnow()
+
+    # Save to DB
+    await db.sessions.update_one({"code": code}, {"$push": {"questions": question}})
+
+    # ensure in-memory session state exists
+    if code not in SESSION_STATE:
+        SESSION_STATE[code] = {"host_sid": None, "participants": {}, "current": None}
+
+    # set current question in memory and reset answers
+    SESSION_STATE[code]["current"] = {"type": "question", "payload": question, "answers": {}}
+
+    # broadcast to room
+    await sio.emit("question:push", question, room=code)
+    await sio.emit("question:timer", {"time": int(question.get("time_limit", 20))}, room=code)
+
+    # Return created question
+    return {"status": "ok", "question": question}
+
+
 # Socket.IO events
 @sio.event
 async def connect(sid, environ):
