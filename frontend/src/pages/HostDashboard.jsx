@@ -28,11 +28,26 @@ export default function HostDashboard({onBack}){
     socket.emit("host:join", { code: j.code, name });
   };
 
-  const pushQuestion = () => {
-    const options = optionsText.split("|").map(s=>s.trim()).filter(Boolean);
-    const q = { text: questionText, type: options.length ? "single" : "text", options, time_limit: 20, points: 100 };
-    socket.emit("host:start-question", { code, question: q });
-  };
+ const pushQuestion = async () => {
+  const options = optionsText.split("|").map(s=>s.trim()).filter(Boolean);
+  const q = { text: questionText, type: options.length ? "single" : "text", options, time_limit: 20, points: 100, correct: null };
+  // call backend REST endpoint
+  const api = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  const resp = await fetch(`${api}/api/session/${code}/question`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(q)
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    alert("Failed to create question: " + (data.detail || JSON.stringify(data)));
+    return;
+  }
+  // Optionally reset UI fields
+  setQuestionText("");
+  setOptionsText("");
+};
+
 
   const startPoll = () => {
     const options = optionsText.split("|").map(s=>s.trim()).filter(Boolean);
